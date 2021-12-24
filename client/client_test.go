@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"testing"
 
@@ -39,31 +40,143 @@ func listenTestServer() *http.Server {
 	return srv
 }
 
-func TestSend(t *testing.T) {
-	listenTestServer()
+func TestDo(t *testing.T) {
+	// src := listenTestServer()
 	// defer srv.Close()
-
-	var (
-		ctx = context.Background()
-	)
 
 	client, err := NewClient(TestPublicKey, TestSecretKey)
 	r.NoError(t, err)
+	defer client.Close()
 
-	// Creates a charge from the token
-	charge := &omise.Charge{}
-	createCharge := &operations.CreateCharge{
-		Amount:   100000, // ฿ 1,000.00
-		Currency: "thb",
-		Card:     "tokn_test_5q97nvva6qxx0tvl5q9",
-	}
+	var (
+		ctx    = context.Background()
+		result = &omise.Charge{}
+		msg    = &operations.CreateCharge{
+			Amount:   100000, // ฿ 1,000.00
+			Currency: "thb",
+			Card:     "tokn_test_123",
+		}
+	)
 
-	req, err := client.OmiseClient.Request(createCharge)
+	req, err := client.OmiseClient.Request(msg)
 	r.NoError(t, err)
 
 	// overwrite test endpoint
 	req.URL.Host = TestEndpoint
 
-	err = client.Do(ctx, req, charge)
+	err = client.Do(ctx, req, result)
 	r.NoError(t, err)
+}
+
+func BenchmarkClient(b *testing.B) {
+	// src := listenTestServer()
+	// defer srv.Close()
+
+	client, _ := NewClient(TestPublicKey, TestSecretKey)
+	defer client.Close()
+
+	var size = 100
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		for i := 0; i < size; i++ {
+			var (
+				ctx    = context.Background()
+				result = &omise.Charge{}
+				msg    = &operations.CreateCharge{
+					Amount:   100000, // ฿ 1,000.00
+					Currency: "thb",
+					Card:     "tokn_test_123",
+				}
+			)
+
+			req, err := client.OmiseClient.Request(msg)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			// overwrite test endpoint
+			req.URL.Host = TestEndpoint
+
+			if err = client.Do(ctx, req, result); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+func BenchmarkOmiseClient(b *testing.B) {
+	// src := listenTestServer()
+	// defer srv.Close()
+
+	client, err := omise.NewClient(TestPublicKey, TestSecretKey)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	var size = 100
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		for i := 0; i < size; i++ {
+			var (
+				result = &omise.Charge{}
+				msg    = &operations.CreateCharge{
+					Amount:   100000, // ฿ 1,000.00
+					Currency: "thb",
+					Card:     "tokn_test_123",
+				}
+			)
+
+			req, err := client.Request(msg)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			// overwrite test endpoint
+			req.URL.Host = TestEndpoint
+			req.URL.Scheme = "http"
+
+			if err = omiseClientDo(client, req, result); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+func omiseClientDo(c *omise.Client, req *http.Request, result interface{}) error {
+	resp, err := c.Client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		return err
+	}
+
+	buffer, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return &omise.ErrTransport{err, buffer}
+	}
+
+	switch {
+	case resp.StatusCode != 200:
+		err := &omise.Error{StatusCode: resp.StatusCode}
+		if err := json.Unmarshal(buffer, err); err != nil {
+			return &omise.ErrTransport{err, buffer}
+		}
+
+		return err
+	} // status == 200 && e == nil
+
+	if result != nil {
+		if err := json.Unmarshal(buffer, result); err != nil {
+			return &omise.ErrTransport{err, buffer}
+		}
+	}
+
+	return nil
 }

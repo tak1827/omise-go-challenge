@@ -19,7 +19,7 @@ type Client struct {
 
 	OmiseClient omise.Client
 
-	Conns map[string]*persistConn
+	conns map[string]*persistConn
 }
 
 var schemas = map[string]string{
@@ -41,7 +41,7 @@ func NewClient(pkey, skey string) (*Client, error) {
 		pkey:        pkey,
 		skey:        skey,
 		OmiseClient: omise.Client{},
-		Conns:       make(map[string]*persistConn, 2),
+		conns:       make(map[string]*persistConn, 2),
 	}, nil
 }
 
@@ -52,19 +52,19 @@ func (c *Client) Do(ctx context.Context, req *http.Request, result interface{}) 
 		host = req.URL.Hostname()
 		port = req.URL.Port()
 	)
-	if _, ok := c.Conns[host]; !ok || c.Conns[host] == nil {
+	if _, ok := c.conns[host]; !ok || c.conns[host] == nil {
 		conn, err := NewConn(ctx, host, port)
 		if err != nil {
 			return err
 		}
-		c.Conns[host] = conn
+		c.conns[host] = conn
 	}
 
 	errCh := make(chan error, 1)
 
 	go func() {
-		err := req.Write(c.Conns[host].bw)
-		c.Conns[host].bw.Flush()
+		err := req.Write(c.conns[host].bw)
+		c.conns[host].bw.Flush()
 		errCh <- err
 	}()
 
@@ -72,7 +72,7 @@ func (c *Client) Do(ctx context.Context, req *http.Request, result interface{}) 
 		return err
 	}
 
-	resp, err := http.ReadResponse(c.Conns[host].br, req)
+	resp, err := http.ReadResponse(c.conns[host].br, req)
 	if err != nil {
 		return err
 	}
@@ -99,4 +99,12 @@ func buildAddres(endpoint string) string {
 		log.Fatalf("[FATAL] failed to parse endpoint(%s)", endpoint)
 	}
 	return fmt.Sprintf("%s:%s", u.Hostname(), schemas[u.Scheme])
+}
+
+func (c *Client) Close() {
+	for key, val := range c.conns {
+		if val != nil {
+			c.conns[key].Close()
+		}
+	}
 }
