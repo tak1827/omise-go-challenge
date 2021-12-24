@@ -1,0 +1,15 @@
+test:
+	go test -race ./...
+
+fmt:
+	go fmt ./...
+
+lint:
+	go vet ./...
+
+build:
+	go build -o challenge -gcflags '-m'
+
+time:
+	gtime -f '%P %Uu %Ss %er %MkB %C' "$@" ./challenge
+
