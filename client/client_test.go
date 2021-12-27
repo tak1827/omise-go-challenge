@@ -159,14 +159,14 @@ func omiseClientDo(c *omise.Client, req *http.Request, result interface{}) error
 
 	buffer, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return &omise.ErrTransport{err, buffer}
+		return &omise.ErrTransport{Err: err, Buffer: buffer}
 	}
 
 	switch {
 	case resp.StatusCode != 200:
 		err := &omise.Error{StatusCode: resp.StatusCode}
 		if err := json.Unmarshal(buffer, err); err != nil {
-			return &omise.ErrTransport{err, buffer}
+			return &omise.ErrTransport{Err: err, Buffer: buffer}
 		}
 
 		return err
@@ -174,7 +174,7 @@ func omiseClientDo(c *omise.Client, req *http.Request, result interface{}) error
 
 	if result != nil {
 		if err := json.Unmarshal(buffer, result); err != nil {
-			return &omise.ErrTransport{err, buffer}
+			return &omise.ErrTransport{Err: err, Buffer: buffer}
 		}
 	}
 

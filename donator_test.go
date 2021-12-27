@@ -1,16 +1,16 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	r "github.com/stretchr/testify/require"
 )
 
 func TestDonatorReader(t *testing.T) {
-	file, err := os.OpenFile("./data-test/fng.1000.csv.rot128", os.O_RDONLY, 0644)
+	file, err := os.OpenFile("./test/fng.1000.csv.rot128", os.O_RDONLY, 0644)
 	r.NoError(t, err)
 
 	var (
@@ -66,7 +66,6 @@ func TestDonatorReader(t *testing.T) {
 
 	var got []Donator
 	for donator := range donatorCh {
-		fmt.Printf("got: %v\n", donator)
 		got = append(got, donator)
 	}
 
@@ -77,4 +76,56 @@ func TestDonatorReader(t *testing.T) {
 		r.Equal(t, true, ok)
 		r.Equal(t, val, got[i])
 	}
+}
+
+func TestOnlyNumber(t *testing.T) {
+	var err error
+
+	err = onlyNumber("12345")
+	r.NoError(t, err)
+
+	err = onlyNumber("12345a")
+	r.EqualError(t, err, ErrInvalidDonatorFormat.Error())
+}
+
+func TestValidateMonth(t *testing.T) {
+	var err error
+
+	err = validateMonth("1")
+	r.NoError(t, err)
+
+	err = validateMonth("01")
+	r.NoError(t, err)
+
+	err = validateMonth("11")
+	r.NoError(t, err)
+
+	err = validateMonth("13")
+	r.EqualError(t, err, ErrInvalidDonatorFormat.Error())
+}
+
+func TestValidateExpiry(t *testing.T) {
+	var (
+		err    error
+		yy, mm int64
+		now    = time.Date(2021, time.Month(11), 1, 0, 0, 0, 0, &time.Location{})
+	)
+
+	mm, yy, err = validateExpiry("12", "2021", now)
+	r.NoError(t, err)
+	r.Equal(t, int64(12), mm)
+	r.Equal(t, int64(2021), yy)
+
+	mm, yy, err = validateExpiry("01", "2022", now)
+	r.NoError(t, err)
+	r.Equal(t, int64(1), mm)
+	r.Equal(t, int64(2022), yy)
+
+	mm, yy, err = validateExpiry("11", "2021", now)
+	r.NoError(t, err)
+	r.Equal(t, int64(11), mm)
+	r.Equal(t, int64(2021), yy)
+
+	mm, yy, err = validateExpiry("10", "2021", now)
+	r.EqualError(t, err, ErrExpiredCard.Error())
 }

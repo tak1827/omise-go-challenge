@@ -1,11 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"io"
+	"os"
 
-	"github.com/omise/omise-go"
+	"github.com/tak1827/go-queue/queue"
 )
 
 const (
@@ -14,22 +14,58 @@ const (
 	OmiseSecretKey = "skey_test_5q93kauvf2839xezykz"
 )
 
-func server() *http.Server {
-	srv := &http.Server{Addr: "localhost:80"}
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, %s", r.URL.Path)
-	})
-	http.HandleFunc("/charges", func(w http.ResponseWriter, r *http.Request) {
-		obj := omise.Charge{}
-		json.NewEncoder(w).Encode(obj)
-	})
-
-	return srv
+func filePath() string {
+	if len(os.Args) != 1 {
+		panic("pass the donation csv path as an argument")
+	}
+	path := os.Args[0]
+	if _, err := os.Stat(path); err != nil {
+		panic(fmt.Sprintf("invalid argument: %s", err.Error()))
+	}
+	return path
 }
 
 func main() {
-	srv := server()
-	if err := srv.ListenAndServe(); err != nil {
+	var (
+		path      = filePath()
+		bsize     = int64(80)
+		buffer    = make([]byte, bsize)
+		donatorCh = make(chan Donator, 1)
+		qsize     = 128
+		offset    = int64(50) // omit header, optimized for this challenge
+	)
+
+	file, err := os.OpenFile(path, os.O_RDONLY, 0644)
+	if err != nil {
 		panic(err)
+	}
+
+	rotReader, err := DonatorReader(file, donatorCh)
+	if err != nil {
+		panic(err)
+	}
+
+	q := queue.NewQueue(qsize, false)
+
+	go func() {
+		defer close(donatorCh)
+		lineCounter := 0
+		for {
+			_, err = rotReader.ReadAt(buffer, offset)
+			if err == io.EOF {
+				break
+			}
+
+			offset += bsize
+
+			lineCounter += 1
+			if lineCounter >= 2 {
+				break
+			}
+		}
+	}()
+
+	for donator := range donatorCh {
+		q.Enqueue(donator)
 	}
 }

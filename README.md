@@ -1,7 +1,6 @@
 # omise-go-challenge
 Go-Challenge of Omise
 
-
 # Client Bench Result
 ```
 cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz

@@ -1,3 +1,4 @@
+.PHONY: test
 test:
 	go test -race ./...
 
@@ -16,3 +17,5 @@ build:
 time:
 	gtime -f '%P %Uu %Ss %er %MkB %C' "$@" ./challenge
 
+srv:
+	go run test/srv.go

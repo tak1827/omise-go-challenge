@@ -3,12 +3,9 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"log"
+	"errors"
+	"io"
 	"net/http"
-	"net/url" // TODO: replace for good performance
-	"strings"
 
 	"github.com/omise/omise-go"
 )
@@ -22,22 +19,21 @@ type Client struct {
 	conns map[string]*persistConn
 }
 
-var schemas = map[string]string{
-	"http":  "80",
-	"https": "443",
-}
+var (
+	ErrRateLimit = errors.New("api rate limit")
 
-func NewClient(pkey, skey string) (*Client, error) {
-	switch {
-	case pkey == "" && skey == "":
-		return nil, omise.ErrInvalidKey
-	case pkey != "" && !strings.HasPrefix(pkey, "pkey_"):
-		return nil, omise.ErrInvalidKey
-	case skey != "" && !strings.HasPrefix(skey, "skey_"):
-		return nil, omise.ErrInvalidKey
+	schemas = map[string]string{
+		"http":  "80",
+		"https": "443",
+	}
+)
+
+func NewClient(pkey, skey string) (Client, error) {
+	if pkey == "" || skey == "" {
+		return Client{}, omise.ErrInvalidKey
 	}
 
-	return &Client{
+	return Client{
 		pkey:        pkey,
 		skey:        skey,
 		OmiseClient: omise.Client{},
@@ -78,12 +74,14 @@ func (c *Client) Do(ctx context.Context, req *http.Request, result interface{}) 
 	}
 	defer resp.Body.Close()
 
-	buffer, err := ioutil.ReadAll(resp.Body)
+	buffer, err := io.ReadAll(resp.Body)
 	if err != nil {
 		err = &omise.ErrTransport{Err: err, Buffer: buffer}
 	}
 
 	switch {
+	case resp.StatusCode == 429:
+		return ErrRateLimit
 	case resp.StatusCode != 200:
 		oErr := &omise.Error{StatusCode: resp.StatusCode}
 		err = json.Unmarshal(buffer, oErr)
@@ -91,14 +89,6 @@ func (c *Client) Do(ctx context.Context, req *http.Request, result interface{}) 
 	}
 
 	return json.Unmarshal(buffer, result)
-}
-
-func buildAddres(endpoint string) string {
-	u, err := url.Parse(endpoint)
-	if err != nil {
-		log.Fatalf("[FATAL] failed to parse endpoint(%s)", endpoint)
-	}
-	return fmt.Sprintf("%s:%s", u.Hostname(), schemas[u.Scheme])
 }
 
 func (c *Client) Close() {
