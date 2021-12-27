@@ -93,6 +93,14 @@ func (d Donator) GenCreateChargeMsg(token string) (charge operations.CreateCharg
 	return
 }
 
+func (d Donator) Amount() int64 {
+	amount, err := strconv.ParseInt(d.AmountSubunits, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return amount
+}
+
 func DonatorReader(f *os.File, ch chan Donator) (*cipher.Rot128Reader, error) {
 	var (
 		donator = Donator{}

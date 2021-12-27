@@ -44,11 +44,13 @@ func NewClient(pkey, skey string) (Client, error) {
 func (c *Client) Do(ctx context.Context, req *http.Request, result interface{}) error {
 	defer req.Body.Close()
 
-	var (
-		host = req.URL.Hostname()
-		port = req.URL.Port()
-	)
+	host := req.URL.Hostname()
+
 	if _, ok := c.conns[host]; !ok || c.conns[host] == nil {
+		port := req.URL.Port()
+		if port == "" {
+			port = schemas[req.URL.Scheme]
+		}
 		conn, err := NewConn(ctx, host, port)
 		if err != nil {
 			return err

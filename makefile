@@ -19,3 +19,6 @@ time:
 
 srv:
 	go run test/srv.go
+
+run:
+	go run ./ ./data/fng.1000.csv.rot128

@@ -21,8 +21,9 @@ const (
 type CallbackFunc func(d Donator, succeeded bool)
 
 type Worker struct {
-	q        *queue.Queue
-	cli      client.Client
+	q   *queue.Queue
+	cli *client.Client
+
 	interval int64 // sec
 
 	callback CallbackFunc
@@ -30,7 +31,7 @@ type Worker struct {
 
 var DefaultCallback = func(d Donator, succeeded bool) {}
 
-func NewWorker(q *queue.Queue, interval int64, pkey, skey string, callback CallbackFunc) Worker {
+func NewWorker(q *queue.Queue, interval int64, pkey, skey string, callback CallbackFunc) *Worker {
 	cli, err := client.NewClient(pkey, skey)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create client, err: %v", err))
@@ -44,9 +45,9 @@ func NewWorker(q *queue.Queue, interval int64, pkey, skey string, callback Callb
 		callback = DefaultCallback
 	}
 
-	return Worker{
+	return &Worker{
 		q:        q,
-		cli:      cli,
+		cli:      &cli,
 		interval: interval,
 		callback: callback,
 	}
@@ -77,15 +78,15 @@ func (w *Worker) Run(ctx context.Context, isTest bool) {
 
 			d = elm.(Donator)
 			if tokenMsg, err = d.GenCreateTokenMsg(); err != nil {
-				if errors.Is(err, ErrExpiredCard) {
-					log.Printf("[WARN] expired card(%v)\n", elm)
+				if !errors.Is(err, ErrExpiredCard) {
+					log.Printf("[WARN] invalid donator format(%v)\n", elm)
 				}
-				w.handleErr(d)
+				w.handleErr(d, err)
 				continue
 			}
 
 			if req, err = w.cli.OmiseClient.Request(&tokenMsg); err != nil {
-				w.handleErr(d)
+				w.handleErr(d, err)
 				continue
 			}
 
@@ -97,18 +98,18 @@ func (w *Worker) Run(ctx context.Context, isTest bool) {
 				if errors.Is(err, client.ErrRateLimit) {
 					w.handleRatelimit(timer, d)
 				} else {
-					w.handleErr(d)
+					w.handleErr(d, err)
 				}
 				continue
 			}
 
 			if chargeMsg, err = d.GenCreateChargeMsg(token.Base.ID); err != nil {
-				w.handleErr(d)
+				w.handleErr(d, err)
 				continue
 			}
 
 			if req, err = w.cli.OmiseClient.Request(&chargeMsg); err != nil {
-				w.handleErr(d)
+				w.handleErr(d, err)
 				continue
 			}
 
@@ -120,7 +121,7 @@ func (w *Worker) Run(ctx context.Context, isTest bool) {
 				if errors.Is(err, client.ErrRateLimit) {
 					w.handleRatelimit(timer, d)
 				} else {
-					w.handleErr(d)
+					w.handleErr(d, err)
 				}
 				continue
 			}
@@ -145,12 +146,12 @@ func (w *Worker) resetTimer(timer *time.Ticker, succeeded bool) {
 	timer.Reset(time.Duration(w.interval) * time.Second)
 }
 
-func (w *Worker) handleErr(d Donator) {
+func (w *Worker) handleErr(d Donator, err error) {
+	log.Printf("[WARN] err: %s\n", err.Error())
 	w.callback(d, false)
 }
 
 func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {
-	w.handleErr(d)
 	w.resetTimer(timer, false)
 	if err := w.q.Enqueue(d); err != nil {
 		panic(fmt.Sprintf("failed to enqueue(%v), err: %s", d, err.Error()))

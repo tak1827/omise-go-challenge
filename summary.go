@@ -8,7 +8,7 @@ import (
 type summary struct {
 	sync.Mutex
 
-	num uint32
+	Num uint32
 
 	Received uint64
 	Donated  uint64
@@ -25,7 +25,7 @@ func NewSummary() *summary {
 }
 
 func (s *summary) IncrementNum(amount int) {
-	atomic.AddUint32(&s.num, uint32(amount))
+	atomic.AddUint32(&s.Num, uint32(amount))
 }
 
 func (s *summary) IncrementReceived(amount int64) {

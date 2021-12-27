@@ -24,7 +24,6 @@ var (
 func NewConn(ctx context.Context, host, port string) (pc *persistConn, err error) {
 	pc = &persistConn{}
 
-	// plainConn, err := net.Dial("tcp", "api.omise.co:443")
 	pc.conn, err = net.Dial("tcp", host+":"+port)
 	if err != nil {
 		return
@@ -34,7 +33,7 @@ func NewConn(ctx context.Context, host, port string) (pc *persistConn, err error
 		errCh := make(chan error, 1)
 		tlsConn := tls.Client(pc.conn, &tls.Config{
 			MinVersion: tls.VersionTLS12,
-			ServerName: "api.omise.co",
+			ServerName: host,
 		})
 		go func() {
 			err := tlsConn.HandshakeContext(ctx)
