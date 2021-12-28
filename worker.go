@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -16,7 +17,9 @@ import (
 
 const (
 	TestEndpoint = "localhost:80"
-	MinInterval = 100 // 100 milsec
+
+	FastInterval = int64(10)    // 100 milsec
+	SlowInterval = int64(10000) // 1s
 )
 
 type CallbackFunc func(d Donator, succeeded bool)
@@ -32,14 +35,10 @@ type Worker struct {
 
 var DefaultCallback = func(d Donator, succeeded bool) {}
 
-func NewWorker(q *queue.Queue, interval int64, pkey, skey string, callback CallbackFunc) *Worker {
+func NewWorker(q *queue.Queue, pkey, skey string, callback CallbackFunc) *Worker {
 	cli, err := client.NewClient(pkey, skey)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create client, err: %v", err))
-	}
-
-	if interval < MinInterval {
-		interval = MinInterval
 	}
 
 	if callback == nil {
@@ -49,7 +48,7 @@ func NewWorker(q *queue.Queue, interval int64, pkey, skey string, callback Callb
 	return &Worker{
 		q:        q,
 		cli:      &cli,
-		interval: interval,
+		interval: FastInterval,
 		callback: callback,
 	}
 }
@@ -98,6 +97,8 @@ func (w *Worker) Run(ctx context.Context, isTest bool) {
 			if err = w.cli.Do(c, req, &token); err != nil {
 				if errors.Is(err, client.ErrRateLimit) {
 					w.handleRatelimit(timer, d)
+				} else if errors.Is(err, io.ErrUnexpectedEOF) {
+					w.handleEOF(timer, d)
 				} else {
 					w.handleErr(d, err)
 				}
@@ -121,6 +122,8 @@ func (w *Worker) Run(ctx context.Context, isTest bool) {
 			if err = w.cli.Do(c, req, &charge); err != nil {
 				if errors.Is(err, client.ErrRateLimit) {
 					w.handleRatelimit(timer, d)
+				} else if errors.Is(err, io.ErrUnexpectedEOF) {
+					w.handleEOF(timer, d)
 				} else {
 					w.handleErr(d, err)
 				}
@@ -128,34 +131,38 @@ func (w *Worker) Run(ctx context.Context, isTest bool) {
 			}
 
 			w.callback(d, true)
-			w.resetTimer(timer, true)
+			w.resetTimer(timer, FastInterval)
 		}
 	}
 }
 
-func (w *Worker) resetTimer(timer *time.Ticker, succeeded bool) {
-	if succeeded {
-		w.interval = w.interval / 2
-	} else {
-		w.interval = w.interval * 4
-	}
-
-	if w.interval < MinInterval {
-		w.interval = MinInterval
-	}
-
+func (w *Worker) resetTimer(timer *time.Ticker, interval int64) {
+	w.interval = interval
 	timer.Reset(time.Duration(w.interval) * time.Millisecond)
 }
 
 func (w *Worker) handleErr(d Donator, err error) {
-	w.callback(d, false)
 	// log.Printf("[WARN] err: %s, interval: %d milisec\n", err.Error(), w.interval)
+	w.callback(d, false)
 }
 
 func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {
-	w.resetTimer(timer, false)
+	log.Printf("[WARN] ratelimit, interval: %d milisec\n", w.interval)
 	if err := w.q.Enqueue(d); err != nil {
 		panic(fmt.Sprintf("failed to enqueue(%v), err: %s", d, err.Error()))
 	}
-	log.Printf("[WARN] ratelimit, interval: %d milisec\n", w.interval)
+	w.resetTimer(timer, SlowInterval)
+}
+
+func (w *Worker) handleEOF(timer *time.Ticker, d Donator) {
+	log.Printf("[WARN] unexpected EOF, interval: %d milisec\n", w.interval)
+	if err := w.q.Enqueue(d); err != nil {
+		panic(fmt.Sprintf("failed to enqueue(%v), err: %s", d, err.Error()))
+	}
+	w.resetTimer(timer, FastInterval)
+	w.cli.ResetConn()
+}
+
+func (w *Worker) Close() {
+	w.cli.Close()
 }

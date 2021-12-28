@@ -18,7 +18,6 @@ const (
 func TestWorker(t *testing.T) {
 	var (
 		q             = queue.NewQueue(16, false)
-		interval      = int64(100)
 		expectedCount = uint32(5)
 		counter       = uint32(0)
 	)
@@ -32,7 +31,8 @@ func TestWorker(t *testing.T) {
 		fmt.Printf("donator: %v\n", d)
 	}
 
-	worker := NewWorker(&q, interval, TestPublicKey, TestSecretKey, callback)
+	worker := NewWorker(&q, TestPublicKey, TestSecretKey, callback)
+	defer worker.Close()
 
 	go func() {
 		worker.Run(ctx, true)

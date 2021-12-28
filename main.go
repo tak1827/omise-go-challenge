@@ -27,7 +27,6 @@ func main() {
 		donatorCh  = make(chan Donator, 1)
 		qsize      = 1024 // donators are less than this
 		q          = queue.NewQueue(qsize, false)
-		interval   = int64(500) // 500 milisec
 		sum        = NewSummary()
 		donatorNum = uint32(0)
 		finishedCh = make(chan struct{}, 1)
@@ -66,8 +65,8 @@ func main() {
 			}
 		}
 		workers = []*Worker{
-			NewWorker(&q, interval, OmisePublicKey, OmiseSecretKey, callback),
-			NewWorker(&q, interval, OmisePublicKey2, OmiseSecretKey2, callback),
+			NewWorker(&q, OmisePublicKey, OmiseSecretKey, callback),
+			NewWorker(&q, OmisePublicKey2, OmiseSecretKey2, callback),
 		}
 	)
 
@@ -104,7 +103,12 @@ func main() {
 
 	// wait for all tasks completion
 	<-finishedCh
+
+	// stop workers
 	stopWorkers()
+	for i := range workers {
+		workers[i].Close()
+	}
 
 	fmt.Println("done.")
 

@@ -93,6 +93,11 @@ func (c *Client) Do(ctx context.Context, req *http.Request, result interface{}) 
 	return json.Unmarshal(buffer, result)
 }
 
+func (c *Client) ResetConn() {
+	c.Close()
+	c.conns = make(map[string]*persistConn, 2)
+}
+
 func (c *Client) Close() {
 	for key, val := range c.conns {
 		if val != nil {
