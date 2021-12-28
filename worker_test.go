@@ -18,7 +18,7 @@ const (
 func TestWorker(t *testing.T) {
 	var (
 		q             = queue.NewQueue(16, false)
-		interval      = int64(10)
+		interval      = int64(100)
 		expectedCount = uint32(5)
 		counter       = uint32(0)
 	)

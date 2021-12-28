@@ -16,7 +16,7 @@ import (
 
 const (
 	TestEndpoint = "localhost:80"
-	MinInterval = 10 // 10 milsec
+	MinInterval = 100 // 100 milsec
 )
 
 type CallbackFunc func(d Donator, succeeded bool)
@@ -149,7 +149,7 @@ func (w *Worker) resetTimer(timer *time.Ticker, succeeded bool) {
 
 func (w *Worker) handleErr(d Donator, err error) {
 	w.callback(d, false)
-	// log.Printf("[WARN] err: %s\n", err.Error())
+	// log.Printf("[WARN] err: %s, interval: %d milisec\n", err.Error(), w.interval)
 }
 
 func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {
@@ -157,5 +157,5 @@ func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {
 	if err := w.q.Enqueue(d); err != nil {
 		panic(fmt.Sprintf("failed to enqueue(%v), err: %s", d, err.Error()))
 	}
-	log.Printf("[WARN] ratelimit, interval: %d\n", w.interval)
+	log.Printf("[WARN] ratelimit, interval: %d milisec\n", w.interval)
 }
