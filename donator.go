@@ -65,6 +65,7 @@ func (d Donator) GenCreateTokenMsg() (token operations.CreateToken, err error) {
 	token.ExpirationMonth = time.Month(mm)
 	token.ExpirationYear = int(yy)
 
+	// NOTE: exampe
 	token.City = "Bangkok"
 	token.PostalCode = "10240"
 

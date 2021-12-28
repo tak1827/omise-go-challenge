@@ -148,7 +148,7 @@ func (w *Worker) resetTimer(timer *time.Ticker, succeeded bool) {
 
 func (w *Worker) handleErr(d Donator, err error) {
 	w.callback(d, false)
-	// log.Printf("[WARN] err: %s\n", err.Error())
+	log.Printf("[WARN] err: %s\n", err.Error())
 }
 
 func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {
