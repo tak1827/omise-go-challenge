@@ -11,10 +11,106 @@ import (
 )
 
 const (
-	// Read these from environment variables or configuration files!
-	OmisePublicKey = "pkey_test_5q93kauv5ilajuv91ry"
-	OmiseSecretKey = "skey_test_5q93kauvf2839xezykz"
+	// NOTE: Read these from environment variables or configuration files!
+	OmisePublicKey  = "pkey_test_5q93kauv5ilajuv91ry"
+	OmiseSecretKey  = "skey_test_5q93kauvf2839xezykz"
+	OmisePublicKey2 = "pkey_test_5qb85uplgtj83tmb5y1"
+	OmiseSecretKey2 = "skey_test_5qb85uplr54fv4ip3f3"
 )
+
+func main() {
+	var (
+		path       = filePath()
+		offset     = int64(50) // omit header, optimized for this challenge
+		bsize      = int64(256)
+		buffer     = make([]byte, bsize)
+		donatorCh  = make(chan Donator, 1)
+		qsize      = 1024 // donators are less than this
+		q          = queue.NewQueue(qsize, false)
+		interval   = int64(1)
+		sum        = NewSummary()
+		donatorNum = uint32(0)
+		finishedCh = make(chan struct{}, 1)
+	)
+
+	// open csv
+	file, err := os.OpenFile(path, os.O_RDONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+	// create cipher reader
+	rotReader, err := DonatorReader(file, donatorCh)
+	if err != nil {
+		panic(err)
+	}
+
+	// prepare workers
+	var (
+		ctx, stopWorkers = context.WithCancel(context.Background())
+		callback         = func(d Donator, succeeded bool) {
+			amount := d.Amount()
+
+			sum.IncrementNum(1)
+			sum.IncrementReceived(amount)
+
+			if succeeded {
+				sum.IncrementDonated(amount)
+				sum.UpdateTop(d.Name, amount)
+			} else {
+				sum.IncrementFaulty(amount)
+			}
+
+			if atomic.LoadUint32(&sum.Num) >= donatorNum {
+				close(finishedCh)
+			}
+		}
+		workers = []*Worker{
+			NewWorker(&q, interval, OmisePublicKey, OmiseSecretKey, callback),
+			NewWorker(&q, interval, OmisePublicKey2, OmiseSecretKey2, callback),
+		}
+	)
+
+	// run workers
+	for i := range workers {
+		go workers[i].Run(ctx, false)
+	}
+
+	fmt.Println("performing donations...")
+
+	// read encripted csv
+	go func() {
+		defer close(donatorCh)
+
+		for {
+			if _, err = rotReader.ReadAt(buffer, offset); err != nil {
+				if err == io.EOF {
+					break
+				}
+				panic(err)
+			}
+
+			offset += bsize
+		}
+	}()
+
+	// enqueue donation tasks
+	for donator := range donatorCh {
+		donatorNum += 1
+		if err = q.Enqueue(donator); err != nil {
+			panic(fmt.Sprintf("queue size is too small, err: %s", err.Error()))
+		}
+	}
+
+	// wait for all tasks completion
+	<-finishedCh
+	stopWorkers()
+
+	fmt.Println("done.")
+
+	// print the result
+	sum.Print()
+}
 
 func filePath() string {
 	if len(os.Args) != 2 {
@@ -25,89 +121,4 @@ func filePath() string {
 		panic(fmt.Sprintf("invalid argument: %s", err.Error()))
 	}
 	return path
-}
-
-func main() {
-	var (
-		path       = filePath()
-		offset     = int64(50) // omit header, optimized for this challenge
-		bsize      = int64(1024)
-		buffer     = make([]byte, bsize)
-		donatorCh  = make(chan Donator, 1)
-		qsize      = 128
-		q          = queue.NewQueue(qsize, false)
-		interval   = int64(1)
-		sum        = NewSummary()
-		donatorNum = uint32(0)
-		finishedCh = make(chan struct{}, 1)
-	)
-
-	file, err := os.OpenFile(path, os.O_RDONLY, 0644)
-	if err != nil {
-		panic(err)
-	}
-
-	rotReader, err := DonatorReader(file, donatorCh)
-	if err != nil {
-		panic(err)
-	}
-
-	callback := func(d Donator, succeeded bool) {
-		amount := d.Amount()
-
-		sum.IncrementNum(1)
-		sum.IncrementReceived(amount)
-
-		if succeeded {
-			sum.IncrementDonated(amount)
-			sum.UpdateTop(d.Name, amount)
-		} else {
-			sum.IncrementFaulty(amount)
-		}
-
-		if atomic.LoadUint32(&sum.Num) >= donatorNum {
-			close(finishedCh)
-		}
-
-		fmt.Printf("donator: %v\n", d)
-	}
-
-	workers := []*Worker{
-		NewWorker(&q, interval, OmisePublicKey, OmiseSecretKey, callback),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	for i := range workers {
-		go workers[i].Run(ctx, false)
-	}
-
-	go func() {
-		defer close(donatorCh)
-		lineCounter := 0
-		for {
-			if _, err = rotReader.ReadAt(buffer, offset); err != nil {
-				if err == io.EOF {
-					break
-				}
-				panic(err)
-			}
-
-			offset += bsize
-
-			lineCounter += 1
-			if lineCounter >= 2 {
-				break
-			}
-		}
-	}()
-
-	for donator := range donatorCh {
-		donatorNum += 1
-		q.Enqueue(donator)
-	}
-
-	<-finishedCh
-	cancel()
-	fmt.Printf("sum: %v\n", sum)
 }

@@ -6,6 +6,7 @@ require (
 	github.com/omise/omise-go v1.0.7
 	github.com/stretchr/testify v1.7.0
 	github.com/tak1827/go-queue v0.0.0-20211219063532-f89670d8ffc1
+	golang.org/x/text v0.3.7
 )
 
 require (

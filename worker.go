@@ -147,8 +147,8 @@ func (w *Worker) resetTimer(timer *time.Ticker, succeeded bool) {
 }
 
 func (w *Worker) handleErr(d Donator, err error) {
-	log.Printf("[WARN] err: %s\n", err.Error())
 	w.callback(d, false)
+	// log.Printf("[WARN] err: %s\n", err.Error())
 }
 
 func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {
@@ -156,4 +156,5 @@ func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {
 	if err := w.q.Enqueue(d); err != nil {
 		panic(fmt.Sprintf("failed to enqueue(%v), err: %s", d, err.Error()))
 	}
+	log.Printf("[WARN] ratelimit, interval: %d\n", w.interval)
 }

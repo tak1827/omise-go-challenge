@@ -1,8 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 type summary struct {
@@ -61,4 +65,18 @@ func (s *summary) UpdateTop(name string, amount int64) {
 
 		s.Top[i+1] = old
 	}
+}
+
+func (s *summary) Print() {
+	p := message.NewPrinter(language.English)
+
+	fmt.Println()
+	fmt.Printf("%20s: THB %20s\n", "total received", p.Sprintf("%d", s.Received))
+	fmt.Printf("%20s: THB %20s\n", "successfully donated", p.Sprintf("%d", s.Donated))
+	fmt.Printf("%20s: THB %20s\n", "faulty donation", p.Sprintf("%d", s.Faulty))
+	fmt.Println()
+	fmt.Printf("%20s: THB %20s\n", "average per person", p.Sprintf("%.2f", float64(s.Received)/float64(s.Num)))
+	fmt.Printf("%20s: THB %s\n", "top donors", s.Top[0])
+	fmt.Printf("%20s  THB %s\n", "", s.Top[1])
+	fmt.Printf("%20s  THB %s\n", "", s.Top[2])
 }
