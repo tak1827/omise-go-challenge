@@ -16,6 +16,7 @@ import (
 
 const (
 	TestEndpoint = "localhost:80"
+	MinInterval = 10 // 10 milsec
 )
 
 type CallbackFunc func(d Donator, succeeded bool)
@@ -24,7 +25,7 @@ type Worker struct {
 	q   *queue.Queue
 	cli *client.Client
 
-	interval int64 // sec
+	interval int64 // milsec
 
 	callback CallbackFunc
 }
@@ -37,8 +38,8 @@ func NewWorker(q *queue.Queue, interval int64, pkey, skey string, callback Callb
 		panic(fmt.Sprintf("failed to create client, err: %v", err))
 	}
 
-	if interval == 0 {
-		interval = 1
+	if interval < MinInterval {
+		interval = MinInterval
 	}
 
 	if callback == nil {
@@ -55,7 +56,7 @@ func NewWorker(q *queue.Queue, interval int64, pkey, skey string, callback Callb
 
 func (w *Worker) Run(ctx context.Context, isTest bool) {
 	var (
-		timer     = time.NewTicker(time.Duration(w.interval) * time.Second)
+		timer     = time.NewTicker(time.Duration(w.interval) * time.Millisecond)
 		d         Donator
 		tokenMsg  operations.CreateToken
 		chargeMsg operations.CreateCharge
@@ -139,16 +140,16 @@ func (w *Worker) resetTimer(timer *time.Ticker, succeeded bool) {
 		w.interval = w.interval * 4
 	}
 
-	if w.interval == 0 {
-		w.interval = 1
+	if w.interval < MinInterval {
+		w.interval = MinInterval
 	}
 
-	timer.Reset(time.Duration(w.interval) * time.Second)
+	timer.Reset(time.Duration(w.interval) * time.Millisecond)
 }
 
 func (w *Worker) handleErr(d Donator, err error) {
 	w.callback(d, false)
-	log.Printf("[WARN] err: %s\n", err.Error())
+	// log.Printf("[WARN] err: %s\n", err.Error())
 }
 
 func (w *Worker) handleRatelimit(timer *time.Ticker, d Donator) {

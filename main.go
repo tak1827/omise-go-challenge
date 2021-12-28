@@ -27,7 +27,7 @@ func main() {
 		donatorCh  = make(chan Donator, 1)
 		qsize      = 1024 // donators are less than this
 		q          = queue.NewQueue(qsize, false)
-		interval   = int64(1)
+		interval   = int64(500) // 500 milisec
 		sum        = NewSummary()
 		donatorNum = uint32(0)
 		finishedCh = make(chan struct{}, 1)
@@ -118,7 +118,7 @@ func filePath() string {
 	}
 	path := os.Args[1]
 	if _, err := os.Stat(path); err != nil {
-		panic(fmt.Sprintf("invalid argument: %s", err.Error()))
+		panic(fmt.Sprintf("invalid argument: %s milisec", err.Error()))
 	}
 	return path
 }
